@@ -1,0 +1,83 @@
+---
+title: "Simulations of Wilson vs. Wald CI Intervals"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Simulations of Wilson vs. Wald CI Intervals}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+In "Wilson Confidence Intervals for Binomial
+Proportions With Multiple Imputation for Missing
+Data" (A. Lott & J. Reiter, 2018), the authors run simulation studies comparing coverage of MI-Wilson and MI-Wald confidence intervals, among a few other slight variations of the two. This is good motivation for using the `phat` versions of the `mi_wilson` and `mi_wald` functions. While we don't implement the simulations here, we lay out a foundation and demonstrate one use of the `mi_wald_phat` and `mi_wilson_phat` functions.
+
+We first load the MI-Wilson library as follows:
+
+```{r setup}
+library(MIWilson)
+```
+
+We then create a simple master dataset with binary values and induce MCAR missingness; this is carried out by the `create_missing_data` function. With the incomplete master dataset, we create multiple imputations using Bayesian principles (see paper for details), using the `create_imps` function. 
+
+```{r}
+#creating missing data
+create_missing_data <- function(n, p, m, MIA_perc) {
+  
+  complete = incomplete = rbinom(n, 1, p)
+  
+  #setting up number of missing values, dataset with missing values
+  blanks = floor(MIA_perc * n)
+  idcs = 1:length(complete)
+  incomplete[sample(idcs, blanks)] = NA
+  
+  return(incomplete)
+
+}
+
+
+#creating multiple imputations
+create_imps <- function(n, m, incomplete) {
+  
+  count_one = table(incomplete)[2]
+  count_zero = table(incomplete)[1]
+  
+  imputations = matrix(nrow = n, ncol = m)
+  for (i in 1:m) {
+    p_star = rbeta(1, count_one + 1, count_zero + 1)
+    incomp_idx = which(is.na(incomplete))
+    
+    curr_imp = incomplete
+    curr_imp[incomp_idx] = rbinom(length(incomp_idx), 1, p_star)
+    
+    imputations[,i] = curr_imp
+  }
+  
+  return(imputations)
+  
+}
+
+```
+
+To demonstrate, we create a master dataset with a true binomial proportion of $p=0.5$ and induce MCAR missingness for 30\% of the dataset. We then produce $m=10$ imputations and use them to create MI-Wilson and MI-Wald confidence intervals for $p$. 
+
+```{r}
+n = 100
+p = 0.7
+m = 10
+MIA_perc = 0.3
+
+incomplete = create_missing_data(n, p, m, MIA_perc)
+imputations = create_imps(n, m, incomplete)
+
+phats = colSums(imputations)/nrow(imputations)
+mi_wald_phat(phats = phats, n = nrow(imputations))
+mi_wilson_phat(phats = phats, n =nrow(imputations))
+```
+
